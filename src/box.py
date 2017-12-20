@@ -103,5 +103,14 @@ class Box():
         r.raise_for_status()
         return r
 
+    def upload_file_version(self, user_id, file_id, filename, boxfilename):
+        headers = { 'Authorization': 'Bearer {}'.format(self.get_auth_token(user_id)), }
+        data = '' if not filename else'{{"name": "{}"}}'.format(boxfilename)
+        files = [ ('attributes', (None, data)),
+                  ('file', ('file', open(filename, 'rb')))]
+        r = requests.post('https://upload.box.com/api/2.0/files/{}/content'.format(file_id), headers=headers, files=files)
+        r.raise_for_status()
+        return r
+
 if __name__ == "__main__":
     print(Box().get_auth_token())

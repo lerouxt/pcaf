@@ -49,7 +49,7 @@ class Forms():
                'marital_status', 'num_children', 'education_level', 'sub_county', 'district', 'village', 'live_with',
                'household_head', 'phq2_total', 'phq9_9', 'phq9_total', 'psychoeducation_flag', 'functioning_total',
                 # following are computed and should match up with COMPUTED_FLAGS
-               'download_date', 'region', 'depressed_flag', 'severely_depressed_flag', 'suicidal_flag'
+               'date_download', 'region', 'depressed_flag', 'severely_depressed_flag', 'suicidal_flag'
              ]
 
     COMPUTED_DEFAULTS = [ datetime.now().isoformat(), 'Unknown', 0, 0, 0 ]
@@ -138,7 +138,7 @@ class Forms():
                 else:
                     value = dpath.util.get(case, key[:-1])
 
-            except KeyError:
+            except KeyError as e:
                 pass
             return value
 
@@ -147,16 +147,16 @@ class Forms():
             try:
                 c = case['form']
                 fields = self.FIELDS.get(c['case']['create']['case_type'])
-                if fields:
+                if fields and c['@name'].startswith('Initial Screener'):
                     row = [get_path(c, x) for x in fields]
-                    row = self.computed_columns(row)
+                    row = self.computed_columns(row, case)
                     rows.append(row)
-            except KeyError:
+            except KeyError as e:
                 pass
 
         return rows
 
-    def computed_columns(self, row):
+    def computed_columns(self, row, case):
         row.extend(self.COMPUTED_DEFAULTS)
         d = OrderedDict(zip(self.HEADER, row))
 
@@ -186,6 +186,9 @@ class Forms():
         d['depressed_flag'] = depressed_flag
         d['severely_depressed_flag'] = severely_depressed_flag
         d['suicidal_flag'] = suicidal_flag
+
+        if len(d['id']) == 0:
+            print('Missing id: {}'.format(json.dumps(case)))
 
         return d.values()
         
