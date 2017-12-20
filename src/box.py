@@ -94,7 +94,7 @@ class Box():
         r.raise_for_status()
         return r
 
-    def upload_file(self, user_id, filename, boxfilename, directory_id=0):
+    def upload_file(self, user_id, directory_id, filename, boxfilename):
         headers = { 'Authorization': 'Bearer {}'.format(self.get_auth_token(user_id)), }
         data = '{{"name": "{}", "parent": {{ "id": "{}" }}}}'.format(boxfilename, directory_id)
         files = [ ('attributes', (None, data)),
