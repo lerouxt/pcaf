@@ -3,15 +3,16 @@
 import requests
 import json
 import argparse
-import logging
 import dpath
 import csv
 import configparser
+import ijson
 
-from collections import OrderedDict
 from datetime import datetime
+from copy import copy
 
-logging.basicConfig(level=logging.INFO)
+from field_mapping import HEADER
+from field_mapping import FORM_MAPPING
 
 class Forms():
     """
@@ -23,38 +24,7 @@ class Forms():
     For suicidal, if the patient scores a 1,2,3.
     """
 
-    FIELDS = {
-        'Followupcase' : 
-            [ 'case/create/case_type', '@name',
-              'ID', 'Date', 'Employment', 'Parish', 'Age', 'Tribe', 'Religion', 'Marital-status', 'Children-No',
-              'Education-level', 'Sub-county', 'District', 'Village', 'Live-with', 'Household-Head',
-              'PHQ2/total_PHQ2',
-              'phq9/PHQ-9/PHQ9-9!', 'phq9/PHQ-9/PHQ9_TOTAL',
-              'PSYCHOEDUCATION',
-              'Functioning/FUNCTIONING/Fx_total'
-            ],
-
-        'KITGUM_SCREENING_TOOLS' : 
-            [ 'case/create/case_type', '@name',
-              'KID', 'Date', 'employment', 'parish', 'age', 'Ethnicity', 'religion', 'marital_status', 'children_no',
-              'education_level', 'sub-county', 'District', 'village', 'live_with', 'hh_head',
-              'PHQ2/PHQ_TOTAL',
-              'PHQ9/PHQ9/PHQ9_9!', 'PHQ9/PHQ9/PHQ9_GRAND_TOTAL', 
-              'PSY_GIVEN_TO_POATIENT_',
-              'FUNCTIONING/Functioning/Fx_total'
-            ],
-        }
-
-    HEADER = [ 'case_type', 'form_name', 'id', 'date_created', 'employment', 'parish', 'age', 'tribe', 'religion',
-               'marital_status', 'num_children', 'education_level', 'sub_county', 'district', 'village', 'live_with',
-               'household_head', 'phq2_total', 'phq9_9', 'phq9_total', 'psychoeducation_flag', 'functioning_total',
-                # following are computed and should match up with COMPUTED_FLAGS
-               'date_download', 'region', 'depressed_flag', 'severely_depressed_flag', 'suicidal_flag'
-             ]
-
-    COMPUTED_DEFAULTS = [ datetime.now().isoformat(), 'Unknown', 0, 0, 0 ]
-
-    def __init__(self, config_file, infile=None, outfile=None):
+    def __init__(self, config_file, infile=None, outfile=None, rejectfile=None, debug=False):
         config = configparser.ConfigParser()
         config.read(config_file)
 
@@ -66,25 +36,30 @@ class Forms():
         self.headers = { 'Authorization': self.APIKEY }
         self.infile=infile
         self.outfile=outfile
-        self._build_lookups()
+        self.rejectfile=rejectfile
+        self.debug=debug
+        self.values=self.get_lookups()
 
     def get_app(self):
         r = requests.get('https://www.commcarehq.org/a/{}/api/v0.5/application/{}'.format(self.APP, self.APP_ID), headers=self.headers )
         r.raise_for_status()
         return r
 
-    def _build_lookups(self):
+    def get_lookups(self):
         app = self.get_app().json()
-        self.values = {}
+        values = {}
         for module in app['modules']:
             for forms in module['forms']:
                 for question in forms['questions']:
                     value = question['value'][6:]
-                    self.values[value] = {}
+                    values[value] = {}
                     if 'options' in question:
                         for option in question['options']:
-                            self.values[value][option['value']] = option['label']
-        #print(self.values)
+                            values[value][option['value']] = option['label']
+        return values
+
+    def dump_lookups(self):
+        print(json.dumps(self.values, indent=4))
 
     def get_form(self, form_id):
         r = requests.get('https://www.commcarehq.org/a/{}/api/v0.5/form/{}'.format(self.APP, form_id), headers=self.headers )
@@ -92,125 +67,133 @@ class Forms():
         print(r.text)
 
     def dump(self):
-        r = requests.get('https://www.commcarehq.org/a/{}/api/v0.4/form/?limit=1000'.format(self.APP), headers=self.headers )
+        r = requests.get('https://www.commcarehq.org/a/{}/api/v0.4/form/?offset=0&limit=100'.format(self.APP), headers=self.headers)
         r.raise_for_status()
         print(r.text)
 
-    def execute(self):
+    def extract_from_commcare(self):
+        next_page = "?offset=0&limit={}".format(self.API_PAGE_LIMIT)
 
-        logging.info('Writing to {}'.format(self.outfile))
-        with open(self.outfile, 'w') as csvfile:
-            wtr = csv.writer(csvfile)
-            wtr.writerow(self.HEADER)
+        while next_page:
+            url = 'https://www.commcarehq.org/a/{}/api/v0.4/form/{}'.format(self.APP, next_page)
+            print('Fetching {}'.format(url))
+            r = requests.get(url, headers=self.headers)
+            r.raise_for_status()
+            jdata = r.json()
+            for obj in jdata["objects"]:
+                yield obj
+            next_page = jdata["meta"]["next"]
 
-            if self.infile:
-                logging.info('Opening {}'.format(self.infile))
-                with open(self.infile) as _file:
-                    jdata = json.load(_file)
-                    
-                    wtr.writerows(self.extract_data(jdata["objects"]))
-            else:
-                next_page = "?offset=0&limit={}".format(self.API_PAGE_LIMIT)
+    def extract_from_file(self):
+        with open(self.infile) as _file:
+            objects = ijson.items(_file, "objects.item")
+            for obj in objects:
+                yield obj
 
-                while next_page:
-                    url = 'https://www.commcarehq.org/a/{}/api/v0.4/form/{}'.format(self.APP, next_page)
-                    logging.info('Fetching {}'.format(url))
-                    r = requests.get(url, headers=self.headers)
-                    r.raise_for_status()
-                    jdata = r.json()
-                    wtr.writerows(self.extract_data(jdata["objects"]))
-                    next_page = jdata["meta"]["next"]
-        
-            #pdf = pandas.DataFrame(data=all_data, columns=self.FIELDS['Followupcase'])
-            #pdf.to_pickle(self.outfile)
+    def extract_from_iter(self, objects):
+        record = 0
+        with open(self.rejectfile, 'w') as _rejectfile:
+            with open(self.outfile, 'w') as _outfile:
+                wtr = csv.DictWriter(_outfile, fieldnames=[ row[0] for row in HEADER ])
+                wtr.writeheader()
+                for o in objects:
+                    try:
+                        record += 1
+                        # THESE are required fields
+                        form_name = o['form']['@name']
+                        case_id = o['form']['case']['@case_id']
+                        form_id = o['form']['@xmlns']
+                        row = self.extract_data(case_id, form_id, o['form'])
+                        if row:
+                            wtr.writerow(row)
+                    except KeyError as e:
+                        _rejectfile.write("\nERROR processing record {}: {}\n".format(record, str(e)))
+                        _rejectfile.write(json.dumps(o, indent=4))
 
-
-    def extract_data(self, objects):
-
-        def get_path(case, key, default=None):
-            value = ""
-            try:
-                if not key.endswith('!'):
-                    value = dpath.util.get(case, key)
-                    if key in self.values:
-                        if value in self.values[key]:
-                            value = self.values[key][value]
+    def extract_data(self, case_id, form_id, data):
+        row = copy(FORM_MAPPING.get(form_id))
+        if row:
+            for field, loc in row.items():
+                value = None
+                do_lookup = False
+                if loc.endswith('!'):
+                    row[field] = loc[:-1]
                 else:
-                    value = dpath.util.get(case, key[:-1])
+                    if loc.endswith('?'):
+                        do_lookup = True
+                        loc = loc[:-1]
 
-            except KeyError as e:
-                pass
-            return value
-
-        rows = []
-        for case in objects:
+                    try:
+                        value = dpath.util.get(data, loc)
+                        if do_lookup and loc in self.values and value in self.values[loc]:
+                            value = self.values[loc][value]
+                    except KeyError as e:
+                        if self.debug:
+                            print("Missing field {} at {} on form {} for case {}".format(field, loc, form_id, case_id))
+                    row[field] = value
             try:
-                c = case['form']
-                fields = self.FIELDS.get(c['case']['create']['case_type'])
-                if fields and c['@name'].startswith('Initial Screener'):
-                    row = [get_path(c, x) for x in fields]
-                    row = self.computed_columns(row, case)
-                    rows.append(row)
-            except KeyError as e:
-                pass
+                row = self.add_computed_columns(row)
+            except Exception as e:
+                print("Error during compute for form {} for case {}".format(form_id, case_id))
+                print(row)
+                raise
+        return row
 
-        return rows
-
-    def computed_columns(self, row, case):
-        row.extend(self.COMPUTED_DEFAULTS)
-        d = OrderedDict(zip(self.HEADER, row))
-
-        region = d.get('case_type').strip()
+    def add_computed_columns(self, row):
         depressed_flag = 0
         severely_depressed_flag = 0
-        phq9 = d.get('phq9_total', '')
+        phq9 = row.get('phq9_total', '')
+        phq9 = '' if phq9 is None else phq9
         phq9 = int(phq9) if len(phq9) > 0 else 0
 
         if phq9 >= 19:
             severely_depressed_flag = 1
 
-        phq9_9 = d.get('phq9_9', '')
+        phq9_9 = row.get('phq9_9', '')
+        phq9_9 = '' if phq9_9 is None else phq9_9
         phq9_9 = int(phq9_9) if len(phq9_9) > 0 else 0
         suicidal_flag = 1 if phq9_9 > 0 else 0 
 
-        if region == 'Followupcase':
-            region = 'Soroti'
+        if row['region'] == 'Soroti':
             if phq9 >= 8:
                 depressed_flag = 1
-        elif region == 'KITGUM_SCREENING_TOOLS':
-            region = 'Kitgum'
+        elif row['region'] == 'Kitgum':
             if phq9 >= 10:
                 depressed_flag = 1
 
-        d['region'] = region
-        d['depressed_flag'] = depressed_flag
-        d['severely_depressed_flag'] = severely_depressed_flag
-        d['suicidal_flag'] = suicidal_flag
+        row['depressed_flag'] = depressed_flag
+        row['severely_depressed_flag'] = severely_depressed_flag
+        row['suicidal_flag'] = suicidal_flag
 
-        if len(d['id']) == 0:
-            print('Missing id: {}'.format(json.dumps(case)))
-
-        return d.values()
+        return row
         
 def main():
     parser = argparse.ArgumentParser(description='Extract form data from commcare')
-    parser.add_argument('--dump', action='store_true', help='Dumps first few forms as json')
+    parser.add_argument('--debug', action='store_true', help='Turns debug mode on')
+    parser.add_argument('--dump', action='store_true', help='Dumps all forms as json')
+    parser.add_argument('--dump-lookups', action='store_true', help='Dumps form lookup data')
     parser.add_argument('--config-file', default='pcaf.cfg', help='Sets the config file')
     parser.add_argument('--get-form', help='Gets form from a form id')
     parser.add_argument('--get-app', action='store_true', help='Gets app')
     parser.add_argument('--infile', help='Optionally specifies filename of JSON instead of calling API')
     parser.add_argument('--outfile', default='out.csv', help='Specify where the output pickle file goes')
+    parser.add_argument('--rejectfile', default='rejects.out', help='Unparseable forms go into this file')
+    parser.add_argument('--extract', action='store_true', help='Extracts csv data from json dump')
     args = parser.parse_args()
 
-    forms = Forms(config_file=args.config_file, infile=args.infile, outfile=args.outfile)
+    forms = Forms(config_file=args.config_file, infile=args.infile, outfile=args.outfile, rejectfile=args.rejectfile, debug=args.debug)
     if args.dump:
         forms.dump()
+    elif args.dump_lookups:
+        forms.dump_lookups()
     elif args.get_app:
         print(forms.get_app().text)
     elif args.get_form:
         forms.get_form(args.get_form)
-    else:
-        forms.execute()
-        pass
+    elif args.extract:
+        if args.infile:
+            forms.extract_from_iter(forms.extract_from_file())
+        else:
+            forms.extract_from_iter(forms.extract_from_commcare())
 
 main()
