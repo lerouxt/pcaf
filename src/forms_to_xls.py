@@ -13,8 +13,8 @@ def to_xls(infile1, infile2, outfile):
     df2 = pandas.read_csv(infile2)
 
     wtr = pandas.ExcelWriter(outfile)
-    df1.to_excel(wtr, 'AllData')
-    df2.to_excel(wtr, 'Flattened')
+    df1.to_excel(wtr, 'AllData', index=False)
+    df2.to_excel(wtr, 'Flattened', index=False)
     wtr.save()
 
 def main():
