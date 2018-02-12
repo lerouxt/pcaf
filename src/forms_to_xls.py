@@ -7,21 +7,24 @@ import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 
-def to_xls(infile, outfile):
+def to_xls(infile1, infile2, outfile):
 
-    df = pandas.read_csv(infile)
+    df1 = pandas.read_csv(infile1)
+    df2 = pandas.read_csv(infile2)
 
     wtr = pandas.ExcelWriter(outfile)
-    df.to_excel(wtr, 'AllData')
+    df1.to_excel(wtr, 'AllData')
+    df2.to_excel(wtr, 'Flattened')
     wtr.save()
 
 def main():
     parser = argparse.ArgumentParser(description='Process form data')
-    parser.add_argument('--infile', help='Name of pickled file of form data')
+    parser.add_argument('--infile1', help='File for first XLS tab')
+    parser.add_argument('--infile2', help='File for second XLS tab')
     parser.add_argument('--outfile', help='Name of XLS file to write')
 
     args = parser.parse_args()
 
-    to_xls(args.infile, args.outfile)
+    to_xls(args.infile1, args.infile2, args.outfile)
 
 main()
