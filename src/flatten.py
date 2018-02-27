@@ -33,8 +33,8 @@ def flatten(infile, outfile):
 
 def main():
     parser = argparse.ArgumentParser(description='Process form data')
-    parser.add_argument('--infile', help='Name of pickled file of form data')
-    parser.add_argument('--outfile', help='Name of XLS file to write')
+    parser.add_argument('--infile', help='Name of CSV file to read')
+    parser.add_argument('--outfile', help='Name of CSV file to write')
 
     args = parser.parse_args()
 
