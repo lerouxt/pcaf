@@ -69,7 +69,7 @@ class Forms():
     def dump(self):
         r = requests.get('https://www.commcarehq.org/a/{}/api/v0.4/form/?offset=0&limit=100'.format(self.APP), headers=self.headers)
         r.raise_for_status()
-        print(r.text)
+        print(json.dumps(r.json(), indent=3))
 
     def extract_from_commcare(self):
         next_page = "?offset=0&limit={}".format(self.API_PAGE_LIMIT)
