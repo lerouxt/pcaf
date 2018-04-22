@@ -66,8 +66,8 @@ class Forms():
         r.raise_for_status()
         print(r.text)
 
-    def dump(self):
-        r = requests.get('https://www.commcarehq.org/a/{}/api/v0.4/form/?offset=0&limit=100'.format(self.APP), headers=self.headers)
+    def dump(self, limit=100):
+        r = requests.get('https://www.commcarehq.org/a/{}/api/v0.4/form/?offset=0&limit={}'.format(self.APP, limit), headers=self.headers)
         r.raise_for_status()
         print(json.dumps(r.json(), indent=3))
 
@@ -176,7 +176,7 @@ def main():
     parser.add_argument('--get-form', help='Gets form from a form id')
     parser.add_argument('--get-app', action='store_true', help='Gets app')
     parser.add_argument('--infile', help='Optionally specifies filename of JSON instead of calling API')
-    parser.add_argument('--outfile', default='out.csv', help='Specify where the output pickle file goes')
+    parser.add_argument('--outfile', default='out.csv', help='Specify where the output csv file goes')
     parser.add_argument('--rejectfile', default='rejects.out', help='Unparseable forms go into this file')
     parser.add_argument('--extract', action='store_true', help='Extracts csv data from json dump')
     args = parser.parse_args()
