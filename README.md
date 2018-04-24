@@ -39,3 +39,9 @@ Create a pcaf.cfg file
 -----
 Create pcaf.cfg file at the root. **Do not add this file to Git since
 it contains sensitive passwords.**
+
+Run a Sample Command
+-----
+A few PyCharm 'Run Configurations' are included in the project.  To run a
+test, choose Run > Run ... > Dump Sample.  This will connect to CoreCard and print out
+100 cases in JSON format. It may take a minute while it connects.
