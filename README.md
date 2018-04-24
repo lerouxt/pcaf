@@ -37,7 +37,5 @@ while all the necessary Python modules are installed.
 
 Create a pcaf.cfg file
 -----
-* Create pcaf.cfg file at the root. * Do not add this file to Git since
-it contains sensitive passwords. *
-
-Test
+Create pcaf.cfg file at the root. **Do not add this file to Git since
+it contains sensitive passwords.**
