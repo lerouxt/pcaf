@@ -3,7 +3,7 @@ beautifulsoup4==4.6.0
 certifi==2018.1.18
 cffi==1.11.5
 chardet==3.0.4
-cryptography==2.2.2
+cryptography==3.2
 data-dispenser==0.2.5.1
 dateutils==0.6.6
 ddlgenerator==0.1.9
